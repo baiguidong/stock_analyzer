@@ -1,0 +1,26 @@
+# 核心依赖
+akshare>=1.12.0
+sqlalchemy>=2.0.0
+pandas>=2.0.0
+pyyaml>=6.0
+
+# API 服务
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# 任务调度
+apscheduler>=3.10.0
+
+# CLI 工具
+typer>=0.9.0
+
+# LLM 支持（可选，根据需要安装）
+openai>=1.0.0
+anthropic>=0.7.0
+# ollama  # 本地模型
+
+# 数据库驱动（可选）
+# pymysql  # MySQL
+# psycopg2-binary  # PostgreSQL
