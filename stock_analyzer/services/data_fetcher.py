@@ -18,10 +18,13 @@ class DataFetcher:
         """
         初始化数据获取器
         Args:
-            token: tushare API token (如果为空，从环境变量TUSHARE_TOKEN读取)
+            token: tushare API token
         """
         if token:
             ts.set_token(token)
+            logger.info(f"Tushare token已设置: {token[:10]}...")
+        else:
+            logger.warning("未提供Tushare token，某些功能可能无法使用")
         self.pro = ts.pro_api()
 
     @staticmethod

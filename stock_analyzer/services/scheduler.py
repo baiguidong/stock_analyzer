@@ -19,7 +19,8 @@ class SchedulerService:
 
     def __init__(self, db_service: DatabaseService):
         self.db_service = db_service
-        self.data_fetcher = DataFetcher()
+        # 从配置中获取tushare token
+        self.data_fetcher = DataFetcher(token=config.tushare.token)
         self.scheduler = BackgroundScheduler()
 
     def update_all_stocks(self):
