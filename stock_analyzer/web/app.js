@@ -1,5 +1,5 @@
 // API基础URL
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = window.location.origin;
 
 // 全局状态
 let conversationHistory = [
@@ -12,6 +12,357 @@ let conversationHistory = [
 let currentPage = 1;
 let totalPages = 1;
 let industries = [];
+let favoriteStocks = new Set(); // 存储用户的自选股票代码
+
+// =============== 认证相关函数 ===============
+
+// 获取认证header
+function getAuthHeaders() {
+    const token = localStorage.getItem('token');
+    const headers = {
+        'Content-Type': 'application/json'
+    };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+}
+
+// 检查是否登录
+function isLoggedIn() {
+    return localStorage.getItem('token') !== null;
+}
+
+// 更新UI显示登录状态
+function updateAuthUI() {
+    const authButtons = document.getElementById('authButtons');
+    const userInfo = document.getElementById('userInfo');
+    const user = JSON.parse(localStorage.getItem('user') || 'null');
+
+    if (user) {
+        authButtons.style.display = 'none';
+        userInfo.style.display = 'flex';
+        document.getElementById('userName').textContent = user.username;
+        document.getElementById('userAvatar').textContent = user.username.charAt(0).toUpperCase();
+
+        // 加载用户自选股票
+        loadUserFavorites();
+    } else {
+        authButtons.style.display = 'flex';
+        userInfo.style.display = 'none';
+    }
+}
+
+// 显示认证模态框
+function showAuthModal(type = 'login') {
+    const modal = document.getElementById('authModal');
+    const loginForm = document.getElementById('loginForm');
+    const registerForm = document.getElementById('registerForm');
+    const modalTitle = document.getElementById('modalTitle');
+
+    if (type === 'login') {
+        loginForm.style.display = 'block';
+        registerForm.style.display = 'none';
+        modalTitle.textContent = '登录';
+    } else {
+        loginForm.style.display = 'none';
+        registerForm.style.display = 'block';
+        modalTitle.textContent = '注册';
+    }
+
+    modal.style.display = 'block';
+}
+
+// 关闭认证模态框
+function closeAuthModal() {
+    document.getElementById('authModal').style.display = 'none';
+    // 清空表单
+    document.getElementById('loginForm').reset();
+    document.getElementById('registerForm').reset();
+    // 隐藏错误消息
+    document.getElementById('loginError').style.display = 'none';
+    document.getElementById('registerError').style.display = 'none';
+}
+
+// 登录
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    const errorEl = document.getElementById('loginError');
+    const submitBtn = document.getElementById('loginSubmitBtn');
+
+    errorEl.style.display = 'none';
+    submitBtn.disabled = true;
+
+    try {
+        const formData = new FormData();
+        formData.append('username', username);
+        formData.append('password', password);
+
+        const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            localStorage.setItem('token', data.access_token);
+            localStorage.setItem('user', JSON.stringify(data.user));
+            closeAuthModal();
+            updateAuthUI();
+            alert('登录成功！');
+        } else {
+            errorEl.textContent = data.detail || '登录失败';
+            errorEl.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('登录失败:', error);
+        errorEl.textContent = '登录失败，请检查网络连接';
+        errorEl.style.display = 'block';
+    } finally {
+        submitBtn.disabled = false;
+    }
+});
+
+// 注册
+document.getElementById('registerForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+
+    const username = document.getElementById('registerUsername').value.trim();
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    const errorEl = document.getElementById('registerError');
+    const submitBtn = document.getElementById('registerSubmitBtn');
+
+    errorEl.style.display = 'none';
+    submitBtn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                username: username,
+                email: email,
+                password: password
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert('注册成功！请登录');
+            showAuthModal('login');
+        } else {
+            errorEl.textContent = data.detail || '注册失败';
+            errorEl.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('注册失败:', error);
+        errorEl.textContent = '注册失败，请检查网络连接';
+        errorEl.style.display = 'block';
+    } finally {
+        submitBtn.disabled = false;
+    }
+});
+
+// 退出登录
+function logout() {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    favoriteStocks.clear();
+    updateAuthUI();
+    alert('已退出登录');
+}
+
+// =============== 自选股票功能 ===============
+
+// 加载用户的自选股票列表（仅股票代码）
+async function loadUserFavorites() {
+    if (!isLoggedIn()) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/favorites`, {
+            headers: getAuthHeaders()
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            favoriteStocks.clear();
+            data.data.forEach(stock => {
+                favoriteStocks.add(stock.code);
+            });
+        }
+    } catch (error) {
+        console.error('加载自选列表失败:', error);
+    }
+}
+
+// 切换自选状态
+async function toggleFavorite(stockCode) {
+    if (!isLoggedIn()) {
+        showAuthModal('login');
+        return;
+    }
+
+    const isFavorite = favoriteStocks.has(stockCode);
+
+    try {
+        if (isFavorite) {
+            // 删除自选
+            const response = await fetch(`${API_BASE_URL}/api/favorites/${stockCode}`, {
+                method: 'DELETE',
+                headers: getAuthHeaders()
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                favoriteStocks.delete(stockCode);
+                alert('已取消自选');
+                // 刷新当前页面
+                if (document.getElementById('favorites-tab').classList.contains('active')) {
+                    loadFavorites();
+                }
+            } else {
+                alert(data.detail || '操作失败');
+            }
+        } else {
+            // 添加自选
+            const response = await fetch(`${API_BASE_URL}/api/favorites`, {
+                method: 'POST',
+                headers: getAuthHeaders(),
+                body: JSON.stringify({ stock_code: stockCode })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                favoriteStocks.add(stockCode);
+                alert('已添加到自选');
+            } else {
+                alert(data.detail || '操作失败');
+            }
+        }
+
+        // 更新按钮状态
+        updateFavoriteButtons();
+
+    } catch (error) {
+        console.error('切换自选失败:', error);
+        alert('操作失败，请重试');
+    }
+}
+
+// 更新自选按钮状态
+function updateFavoriteButtons() {
+    document.querySelectorAll('.favorite-btn').forEach(btn => {
+        const stockCode = btn.dataset.code;
+        if (favoriteStocks.has(stockCode)) {
+            btn.textContent = '已自选';
+            btn.classList.add('active');
+        } else {
+            btn.textContent = '加自选';
+            btn.classList.remove('active');
+        }
+    });
+}
+
+// 加载自选股票列表（完整数据）
+async function loadFavorites() {
+    if (!isLoggedIn()) {
+        switchTab('chat');
+        showAuthModal('login');
+        return;
+    }
+
+    const loading = document.getElementById('favoritesLoading');
+    const empty = document.getElementById('favoritesEmpty');
+    const table = document.getElementById('favoritesTable');
+    const tbody = document.getElementById('favoritesTableBody');
+
+    loading.style.display = 'flex';
+    empty.style.display = 'none';
+    table.style.display = 'none';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/favorites`, {
+            headers: getAuthHeaders()
+        });
+
+        const data = await response.json();
+        loading.style.display = 'none';
+
+        if (data.success && data.data.length > 0) {
+            tbody.innerHTML = '';
+            data.data.forEach(stock => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td><span class="stock-code" onclick="viewStockDetail('${stock.code}')">${stock.code}</span></td>
+                    <td>${stock.name}</td>
+                    <td>${stock.industry || '-'}</td>
+                    <td>${formatNumber(stock.pe_ratio)}</td>
+                    <td>${formatNumber(stock.pb_ratio)}</td>
+                    <td>${formatNumber(stock.roe)}</td>
+                    <td>${formatNumber(stock.total_market_cap)}</td>
+                    <td>${formatNumber(stock.turnover_rate)}</td>
+                    <td>${stock.added_at}</td>
+                    <td>
+                        <button class="favorite-btn active" data-code="${stock.code}" onclick="toggleFavorite('${stock.code}')">
+                            已自选
+                        </button>
+                    </td>
+                `;
+            });
+
+            table.style.display = 'table';
+        } else {
+            empty.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('加载自选列表失败:', error);
+        loading.style.display = 'none';
+        empty.style.display = 'block';
+    }
+}
+
+// 更新自选股票数据
+async function updateFavoritesData() {
+    if (!isLoggedIn()) {
+        showAuthModal('login');
+        return;
+    }
+
+    if (!confirm('确定要更新自选股票的历史数据吗？这可能需要一些时间。')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/favorites/update`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert(data.message);
+        } else {
+            alert('更新失败: ' + (data.detail || '未知错误'));
+        }
+    } catch (error) {
+        console.error('更新数据失败:', error);
+        alert('更新失败，请重试');
+    }
+}
 
 // =============== 通用函数 ===============
 
@@ -29,6 +380,8 @@ function switchTab(tabName) {
     if (tabName === 'list') {
         loadIndustries();
         loadStockList();
+    } else if (tabName === 'favorites') {
+        loadFavorites();
     }
 }
 
@@ -233,6 +586,7 @@ async function loadStockList(page = 1) {
             tbody.innerHTML = '';
             data.data.forEach(stock => {
                 const row = tbody.insertRow();
+                const isFavorite = favoriteStocks.has(stock.code);
                 row.innerHTML = `
                     <td><span class="stock-code" onclick="viewStockDetail('${stock.code}')">${stock.code}</span></td>
                     <td>${stock.name}</td>
@@ -242,6 +596,13 @@ async function loadStockList(page = 1) {
                     <td>${formatNumber(stock.roe)}</td>
                     <td>${formatNumber(stock.total_market_cap)}</td>
                     <td>${formatNumber(stock.turnover_rate)}</td>
+                    <td>
+                        <button class="favorite-btn ${isFavorite ? 'active' : ''}"
+                                data-code="${stock.code}"
+                                onclick="toggleFavorite('${stock.code}')">
+                            ${isFavorite ? '已自选' : '加自选'}
+                        </button>
+                    </td>
                 `;
             });
 
@@ -553,6 +914,7 @@ function renderKlineChart(data) {
 
 window.onload = function() {
     loadStats();
+    updateAuthUI();
     document.getElementById('messageInput').focus();
 
     // 每30秒刷新一次统计信息
@@ -564,4 +926,12 @@ window.onload = function() {
             loadStockDetail();
         }
     });
+
+    // 点击模态框外部关闭
+    window.onclick = function(event) {
+        const modal = document.getElementById('authModal');
+        if (event.target == modal) {
+            closeAuthModal();
+        }
+    }
 };

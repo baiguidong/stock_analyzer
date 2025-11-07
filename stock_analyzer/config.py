@@ -14,6 +14,11 @@ class DatabaseConfig(BaseModel):
     url: str = "sqlite:///./stock_data.db"
 
 
+class TushareConfig(BaseModel):
+    """Tushare配置"""
+    token: str = ""
+
+
 class LLMConfig(BaseModel):
     """大模型配置"""
     provider: str = "openai"
@@ -24,9 +29,15 @@ class LLMConfig(BaseModel):
 
 class UpdateScheduleConfig(BaseModel):
     """更新调度配置"""
-    daily_update_time: str = "16:00"
+    daily_update_time: str = "07:00"
     auto_update: bool = True
     update_on_start: bool = False
+
+
+class JWTConfig(BaseModel):
+    """JWT认证配置"""
+    secret_key: str = "your-secret-key-change-this-in-production"
+    access_token_expire_minutes: int = 1440  # 24小时
 
 
 class APIConfig(BaseModel):
@@ -45,8 +56,10 @@ class WebConfig(BaseModel):
 class Config(BaseSettings):
     """全局配置"""
     database: DatabaseConfig = DatabaseConfig()
+    tushare: TushareConfig = TushareConfig()
     llm: LLMConfig = LLMConfig()
     update_schedule: UpdateScheduleConfig = UpdateScheduleConfig()
+    jwt: JWTConfig = JWTConfig()
     api: APIConfig = APIConfig()
     web: WebConfig = WebConfig()
 

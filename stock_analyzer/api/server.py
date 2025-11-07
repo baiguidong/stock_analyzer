@@ -1,18 +1,30 @@
 """
 FastAPI 服务端
 """
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, EmailStr
 from typing import List, Optional, Dict, Any
 import uvicorn
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 
 from ..services import DatabaseService, DataFetcher, SchedulerService
 from ..tools import StockTools, get_stock_tools_definitions
 from ..config import config
+from ..models import User, Favorite, Stock
 from .llm_handler import LLMHandler
+from .auth import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    get_current_user_id,
+    Token
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -41,6 +53,25 @@ llm_handler = None
 
 
 # Pydantic 模型
+class UserRegister(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    id: int
+    username: str
+    email: str
+    is_active: bool
+    created_at: datetime
+
+
 class ChatMessage(BaseModel):
     role: str
     content: str
@@ -79,6 +110,11 @@ class StockListRequest(BaseModel):
     sort_order: Optional[str] = "asc"  # asc, desc
 
 
+class FavoriteRequest(BaseModel):
+    """自选股票请求"""
+    stock_code: str
+
+
 @app.on_event("startup")
 async def startup_event():
     """应用启动时初始化"""
@@ -99,6 +135,12 @@ async def startup_event():
     # 初始化 LLM 处理器
     llm_handler = LLMHandler(stock_tools)
 
+    # 挂载静态文件服务
+    web_dir = Path(__file__).parent.parent / "web"
+    if web_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(web_dir)), name="static")
+        logger.info(f"已挂载静态文件目录: {web_dir}")
+
     logger.info("服务初始化完成")
 
 
@@ -115,12 +157,328 @@ async def shutdown_event():
 
 @app.get("/")
 async def root():
-    """根路径"""
-    return {
-        "message": "A股数据分析API服务",
-        "version": "1.0.0",
-        "docs_url": "/docs"
-    }
+    """根路径 - 返回Web页面"""
+    web_dir = Path(__file__).parent.parent / "web"
+    index_file = web_dir / "index.html"
+
+    if index_file.exists():
+        return FileResponse(index_file)
+    else:
+        return {
+            "message": "A股数据分析API服务",
+            "version": "1.0.0",
+            "docs_url": "/docs"
+        }
+
+
+# ========== 用户认证接口 ==========
+
+@app.post("/api/auth/register", response_model=Dict)
+async def register(user: UserRegister):
+    """用户注册"""
+    try:
+        session = db_service.get_session()
+
+        try:
+            # 检查用户名是否已存在
+            existing_user = session.query(User).filter(User.username == user.username).first()
+            if existing_user:
+                raise HTTPException(status_code=400, detail="用户名已存在")
+
+            # 检查邮箱是否已存在
+            existing_email = session.query(User).filter(User.email == user.email).first()
+            if existing_email:
+                raise HTTPException(status_code=400, detail="邮箱已被使用")
+
+            # 创建新用户
+            hashed_password = get_password_hash(user.password)
+            new_user = User(
+                username=user.username,
+                email=user.email,
+                hashed_password=hashed_password
+            )
+
+            session.add(new_user)
+            session.commit()
+            session.refresh(new_user)
+
+            return {
+                "success": True,
+                "message": "注册成功",
+                "user": {
+                    "id": new_user.id,
+                    "username": new_user.username,
+                    "email": new_user.email
+                }
+            }
+
+        finally:
+            session.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"用户注册失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/auth/login", response_model=Dict)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    """用户登录"""
+    try:
+        session = db_service.get_session()
+
+        try:
+            # 查找用户
+            user = session.query(User).filter(User.username == form_data.username).first()
+
+            if not user or not verify_password(form_data.password, user.hashed_password):
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="用户名或密码错误",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+            if not user.is_active:
+                raise HTTPException(status_code=400, detail="用户已被禁用")
+
+            # 创建访问令牌
+            access_token = create_access_token(
+                data={"sub": user.username, "user_id": user.id}
+            )
+
+            return {
+                "success": True,
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email
+                }
+            }
+
+        finally:
+            session.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"用户登录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/auth/me", response_model=Dict)
+async def get_current_user(user_id: int = Depends(get_current_user_id)):
+    """获取当前用户信息"""
+    try:
+        session = db_service.get_session()
+
+        try:
+            user = session.query(User).filter(User.id == user_id).first()
+
+            if not user:
+                raise HTTPException(status_code=404, detail="用户不存在")
+
+            return {
+                "success": True,
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "is_active": user.is_active,
+                    "created_at": user.created_at.strftime("%Y-%m-%d %H:%M:%S")
+                }
+            }
+
+        finally:
+            session.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取用户信息失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== 自选股票接口 ==========
+
+@app.post("/api/favorites", response_model=Dict)
+async def add_favorite(
+    request: FavoriteRequest,
+    user_id: int = Depends(get_current_user_id)
+):
+    """添加自选股票"""
+    try:
+        session = db_service.get_session()
+
+        try:
+            # 检查股票是否存在
+            stock = session.query(Stock).filter(Stock.code == request.stock_code).first()
+            if not stock:
+                raise HTTPException(status_code=404, detail="股票不存在")
+
+            # 检查��否已添加
+            existing = session.query(Favorite).filter(
+                Favorite.user_id == user_id,
+                Favorite.stock_code == request.stock_code
+            ).first()
+
+            if existing:
+                raise HTTPException(status_code=400, detail="已添加到自选")
+
+            # 添加自选
+            favorite = Favorite(
+                user_id=user_id,
+                stock_code=request.stock_code
+            )
+
+            session.add(favorite)
+            session.commit()
+
+            return {
+                "success": True,
+                "message": "添加成功"
+            }
+
+        finally:
+            session.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"添加自选失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/favorites/{stock_code}", response_model=Dict)
+async def remove_favorite(
+    stock_code: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """删除自选股票"""
+    try:
+        session = db_service.get_session()
+
+        try:
+            favorite = session.query(Favorite).filter(
+                Favorite.user_id == user_id,
+                Favorite.stock_code == stock_code
+            ).first()
+
+            if not favorite:
+                raise HTTPException(status_code=404, detail="自选不存在")
+
+            session.delete(favorite)
+            session.commit()
+
+            return {
+                "success": True,
+                "message": "删除成功"
+            }
+
+        finally:
+            session.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"删除自选失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/favorites", response_model=Dict)
+async def get_favorites(user_id: int = Depends(get_current_user_id)):
+    """获取自选股票列表"""
+    try:
+        session = db_service.get_session()
+
+        try:
+            # 查询自选股票
+            favorites = session.query(Favorite, Stock).join(
+                Stock, Favorite.stock_code == Stock.code
+            ).filter(
+                Favorite.user_id == user_id
+            ).all()
+
+            data = []
+            for favorite, stock in favorites:
+                data.append({
+                    "code": stock.code,
+                    "name": stock.name,
+                    "market": stock.market,
+                    "industry": stock.industry,
+                    "pe_ratio": stock.pe_ratio,
+                    "pb_ratio": stock.pb_ratio,
+                    "roe": stock.roe,
+                    "total_market_cap": stock.total_market_cap,
+                    "circulating_market_cap": stock.circulating_market_cap,
+                    "turnover_rate": stock.turnover_rate,
+                    "added_at": favorite.added_at.strftime("%Y-%m-%d %H:%M:%S"),
+                    "updated_at": stock.updated_at.strftime("%Y-%m-%d %H:%M:%S") if stock.updated_at else None
+                })
+
+            return {
+                "success": True,
+                "data": data,
+                "count": len(data)
+            }
+
+        finally:
+            session.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取自选列表失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/favorites/update", response_model=Dict)
+async def update_favorites_data(
+    background_tasks: BackgroundTasks,
+    user_id: int = Depends(get_current_user_id)
+):
+    """更新自选股票历史数据"""
+    try:
+        session = db_service.get_session()
+
+        try:
+            # 获取用户的自选股票代码
+            favorites = session.query(Favorite.stock_code).filter(
+                Favorite.user_id == user_id
+            ).all()
+
+            stock_codes = [f.stock_code for f in favorites]
+
+            if not stock_codes:
+                return {
+                    "success": True,
+                    "message": "没有自选股票需要更新"
+                }
+
+            # 后台任务更新
+            background_tasks.add_task(
+                scheduler_service.update_daily_data,
+                stock_codes
+            )
+
+            return {
+                "success": True,
+                "message": f"已开始更新 {len(stock_codes)} 只自选股票的历史数据"
+            }
+
+        finally:
+            session.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"更新自选数据失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ========== 原有接口 ==========
 
 
 @app.get("/api/stats")

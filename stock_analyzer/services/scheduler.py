@@ -112,14 +112,34 @@ class SchedulerService:
             logger.error(f"更新每日数据失败: {e}")
 
     def daily_update_job(self):
-        """每日更新任务"""
-        logger.info("执行每日定时更新任务...")
+        """每日更新任务 - 更新所有用户的自选股票历史数据"""
+        logger.info("执行每日定时更新任务（更新自选股票历史数据）...")
 
-        # 1. 更新股票基本信息
-        self.update_all_stocks()
+        try:
+            from ..models import Favorite
+            from sqlalchemy import distinct
 
-        # 2. 更新每日行情数据
-        self.update_daily_data()
+            session = self.db_service.get_session()
+
+            try:
+                # 获取所有用户的自选股票代码（去重）
+                favorites = session.query(distinct(Favorite.stock_code)).all()
+                stock_codes = [f[0] for f in favorites]
+
+                if not stock_codes:
+                    logger.info("没有自选股票需要更新")
+                    return
+
+                logger.info(f"准备更新 {len(stock_codes)} 只自选股票的历史数据")
+
+                # 更新自选股票的历史数据
+                self.update_daily_data(stock_codes)
+
+            finally:
+                session.close()
+
+        except Exception as e:
+            logger.error(f"每日更新任务失败: {e}")
 
         logger.info("每日更新任务完成")
 

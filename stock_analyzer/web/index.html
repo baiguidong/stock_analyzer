@@ -47,6 +47,12 @@
             font-weight: 600;
         }
 
+        .header-right {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+
         .stats {
             display: flex;
             gap: 20px;
@@ -62,6 +68,201 @@
         .stat-value {
             font-size: 18px;
             font-weight: bold;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: white;
+            color: #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .user-name {
+            font-size: 14px;
+        }
+
+        .auth-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .auth-btn {
+            padding: 8px 16px;
+            border: 1px solid white;
+            background: transparent;
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .auth-btn:hover {
+            background: white;
+            color: #667eea;
+        }
+
+        .logout-btn {
+            padding: 8px 16px;
+            border: none;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .logout-btn:hover {
+            background: rgba(255,255,255,0.3);
+        }
+
+        /* 模态框 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 10% auto;
+            padding: 0;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 400px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            animation: slideDown 0.3s;
+        }
+
+        @keyframes slideDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 16px 16px 0 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .close {
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            line-height: 1;
+        }
+
+        .close:hover {
+            opacity: 0.8;
+        }
+
+        .modal-body {
+            padding: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #334;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-submit-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .form-submit-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .form-submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .form-switch {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #64748b;
+        }
+
+        .form-switch a {
+            color: #667eea;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .form-switch a:hover {
+            text-decoration: underline;
+        }
+
+        .error-message {
+            color: #f56565;
+            font-size: 13px;
+            margin-top: 10px;
+            display: none;
         }
 
         /* 标签页导航 */
@@ -337,6 +538,27 @@
             color: #48bb78;
         }
 
+        .favorite-btn {
+            padding: 4px 12px;
+            border: 1px solid #667eea;
+            background: white;
+            color: #667eea;
+            border-radius: 6px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .favorite-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .favorite-btn.active {
+            background: #667eea;
+            color: white;
+        }
+
         .pagination {
             padding: 20px;
             display: flex;
@@ -492,6 +714,15 @@
             text-align: center;
             color: #64748b;
         }
+
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #e0e0e0;
+        }
     </style>
 </head>
 <body>
@@ -499,60 +730,44 @@
         <!-- 头部 -->
         <div class="header">
             <h1>A股数据分析平台</h1>
-            <div class="stats">
-                <div class="stat-item">
-                    <span class="stat-value" id="stockCount">-</span>
-                    <span>股票数</span>
+            <div class="header-right">
+                <div class="stats">
+                    <div class="stat-item">
+                        <span class="stat-value" id="stockCount">-</span>
+                        <span>股票数</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="recordCount">-</span>
+                        <span>数据记录</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-value" id="latestDate">-</span>
+                        <span>最新日期</span>
+                    </div>
                 </div>
-                <div class="stat-item">
-                    <span class="stat-value" id="recordCount">-</span>
-                    <span>数据记录</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-value" id="latestDate">-</span>
-                    <span>最新日期</span>
+                <div id="authSection">
+                    <div class="auth-buttons" id="authButtons">
+                        <button class="auth-btn" onclick="showAuthModal('login')">登录</button>
+                        <button class="auth-btn" onclick="showAuthModal('register')">注册</button>
+                    </div>
+                    <div class="user-info" id="userInfo" style="display: none;">
+                        <div class="user-avatar" id="userAvatar">U</div>
+                        <span class="user-name" id="userName"></span>
+                        <button class="logout-btn" onclick="logout()">退出</button>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- 标签页导航 -->
         <div class="tabs">
-            <button class="tab active" onclick="switchTab('chat')">AI对话</button>
-            <button class="tab" onclick="switchTab('list')">股票列表</button>
+            <button class="tab" onclick="switchTab('list')">A股分析平台</button>
+            <button class="tab" onclick="switchTab('favorites')">我的自选</button>
             <button class="tab" onclick="switchTab('detail')">股票详情</button>
+            <button class="tab active" onclick="switchTab('chat')">AI对话</button>
         </div>
 
-        <!-- Chat 标签页 -->
-        <div class="tab-content active" id="chat-tab">
-            <div class="chat-container">
-                <div class="examples">
-                    <button class="example-btn" onclick="sendExample('查询平安银行的股票信息')">查询平安银行</button>
-                    <button class="example-btn" onclick="sendExample('帮我找市盈率在10-20之间的股票')">筛选低估值股票</button>
-                    <button class="example-btn" onclick="sendExample('查询贵州茅台最近30天的历史数据')">查看历史数据</button>
-                    <button class="example-btn" onclick="sendExample('有哪些新能源行业的股票？')">行业查询</button>
-                </div>
-
-                <div class="messages" id="messages">
-                    <div class="message assistant">
-                        <div class="message-avatar">🤖</div>
-                        <div class="message-content">
-                            你好！我是A股数据分析助手。我可以帮你查询股票信息、分析市场数据。
-                            <br><br>
-                            你可以问我任何关于股票的问题，或者切换到"股票列表"和"股票详情"标签查看更多数据。
-                        </div>
-                    </div>
-                </div>
-
-                <div class="input-area">
-                    <input type="text" class="input-box" id="messageInput"
-                           placeholder="输入你的问题，例如：查询平安银行的股票信息"
-                           onkeypress="handleKeyPress(event)">
-                    <button class="send-button" id="sendButton" onclick="sendMessage()">发送</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 股票列表标签页 -->
+        <!-- A股分析平台标签页 (原股票列表) -->
         <div class="tab-content" id="list-tab">
             <div class="list-container">
                 <div class="filter-panel">
@@ -618,6 +833,7 @@
                                 <th>ROE(%)</th>
                                 <th>市值(亿)</th>
                                 <th>换手率(%)</th>
+                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="stockTableBody">
@@ -633,6 +849,45 @@
             </div>
         </div>
 
+        <!-- 我的自选标签页 -->
+        <div class="tab-content" id="favorites-tab">
+            <div class="list-container">
+                <div class="filter-panel">
+                    <div class="filter-row">
+                        <button class="btn" onclick="loadFavorites()">刷新列表</button>
+                        <button class="btn" onclick="updateFavoritesData()">更新数据</button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <div id="favoritesLoading" class="loading" style="display:none;">
+                        <div class="loading-spinner"></div> 加载中...
+                    </div>
+                    <div id="favoritesEmpty" class="empty" style="display:none;">
+                        暂无自选股票
+                    </div>
+                    <table id="favoritesTable" style="display:none;">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>行业</th>
+                                <th>市盈率</th>
+                                <th>市净率</th>
+                                <th>ROE(%)</th>
+                                <th>市值(亿)</th>
+                                <th>换手率(%)</th>
+                                <th>添加时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="favoritesTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- 股票详情标签页 -->
         <div class="tab-content" id="detail-tab">
             <div class="detail-container">
@@ -644,6 +899,85 @@
                 <div class="detail-content" id="detailContent">
                     <div class="empty">请输入股票代码查询</div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Chat 标签页 -->
+        <div class="tab-content active" id="chat-tab">
+            <div class="chat-container">
+                <div class="examples">
+                    <button class="example-btn" onclick="sendExample('查询平安银行的股票信息')">查询平安银行</button>
+                    <button class="example-btn" onclick="sendExample('帮我找市盈率在10-20之间的股票')">筛选低估值股票</button>
+                    <button class="example-btn" onclick="sendExample('查询贵州茅台最近30天的历史数据')">查看历史数据</button>
+                    <button class="example-btn" onclick="sendExample('有哪些新能源行业的股票？')">行业查询</button>
+                </div>
+
+                <div class="messages" id="messages">
+                    <div class="message assistant">
+                        <div class="message-avatar">🤖</div>
+                        <div class="message-content">
+                            你好！我是A股数据分析助手。我可以帮你查询股票信息、分析市场数据。
+                            <br><br>
+                            你可以问我任何关于股票的问题，或者切换到"A股分析平台"和"我的自选"标签查看更多数据。
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <input type="text" class="input-box" id="messageInput"
+                           placeholder="输入你的问题，例如：查询平安银行的股票信息"
+                           onkeypress="handleKeyPress(event)">
+                    <button class="send-button" id="sendButton" onclick="sendMessage()">发送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 登录/注册模态框 -->
+    <div id="authModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">登录</h2>
+                <span class="close" onclick="closeAuthModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <!-- 登录表单 -->
+                <form id="loginForm" style="display: none;">
+                    <div class="form-group">
+                        <label>用户名</label>
+                        <input type="text" id="loginUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="loginPassword" required>
+                    </div>
+                    <div class="error-message" id="loginError"></div>
+                    <button type="submit" class="form-submit-btn" id="loginSubmitBtn">登录</button>
+                    <div class="form-switch">
+                        还没有账号？<a onclick="showAuthModal('register')">立即注册</a>
+                    </div>
+                </form>
+
+                <!-- 注册表单 -->
+                <form id="registerForm" style="display: none;">
+                    <div class="form-group">
+                        <label>用户名</label>
+                        <input type="text" id="registerUsername" required>
+                    </div>
+                    <div class="form-group">
+                        <label>邮箱</label>
+                        <input type="email" id="registerEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label>密码</label>
+                        <input type="password" id="registerPassword" required>
+                    </div>
+                    <div class="error-message" id="registerError"></div>
+                    <button type="submit" class="form-submit-btn" id="registerSubmitBtn">注册</button>
+                    <div class="form-switch">
+                        已有账号？<a onclick="showAuthModal('login')">立即登录</a>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

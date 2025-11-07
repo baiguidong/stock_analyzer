@@ -3,8 +3,9 @@
 """
 from datetime import date, datetime
 from typing import Optional
-from sqlalchemy import Column, String, Float, Integer, Date, DateTime, Index, BigInteger
+from sqlalchemy import Column, String, Float, Integer, Date, DateTime, Index, BigInteger, Boolean, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
@@ -83,3 +84,56 @@ class StockDaily(Base):
 
     def __repr__(self):
         return f"<StockDaily(code={self.code}, date={self.trade_date}, close={self.close})>"
+
+
+class User(Base):
+    """用户表"""
+    __tablename__ = "users"
+
+    # 用户ID（主键）
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="用户ID")
+    # 用户名（唯一）
+    username = Column(String(50), unique=True, nullable=False, index=True, comment="用户名")
+    # 邮箱（唯一）
+    email = Column(String(100), unique=True, nullable=False, index=True, comment="邮箱")
+    # 密码哈希
+    hashed_password = Column(String(255), nullable=False, comment="密码哈希")
+    # 是否激活
+    is_active = Column(Boolean, default=True, comment="是否激活")
+    # 是否管理员
+    is_admin = Column(Boolean, default=False, comment="是否管理员")
+    # 创建时间
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    # 更新时间
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    # 关联自选股票
+    favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<User(id={self.id}, username={self.username})>"
+
+
+class Favorite(Base):
+    """用户自选股票表"""
+    __tablename__ = "favorites"
+
+    # 自增ID
+    id = Column(Integer, primary_key=True, autoincrement=True, comment="自选ID")
+    # 用户ID（外键）
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True, comment="用户ID")
+    # 股票代码
+    stock_code = Column(String(10), nullable=False, index=True, comment="股票代码")
+    # 添加时间
+    added_at = Column(DateTime, default=datetime.now, comment="添加时间")
+
+    # 关联用户
+    user = relationship("User", back_populates="favorites")
+
+    # 创建联合唯一索引（一个用户不能重复添加同一只股票）
+    __table_args__ = (
+        Index('idx_user_stock', 'user_id', 'stock_code', unique=True),
+    )
+
+    def __repr__(self):
+        return f"<Favorite(user_id={self.user_id}, stock_code={self.stock_code})>"

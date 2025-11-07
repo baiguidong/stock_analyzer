@@ -1,7 +1,7 @@
 """
-数据获取服务 - 使用 akshare 获取股票数据
+数据获取服务 - 使用 tushare 获取股票数据
 """
-import akshare as ak
+import tushare as ts
 import pandas as pd
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional
@@ -14,45 +14,88 @@ logger = logging.getLogger(__name__)
 class DataFetcher:
     """股票数据获取器"""
 
+    def __init__(self, token: str = None):
+        """
+        初始化数据获取器
+        Args:
+            token: tushare API token (如果为空，从环境变量TUSHARE_TOKEN读取)
+        """
+        if token:
+            ts.set_token(token)
+        self.pro = ts.pro_api()
+
     @staticmethod
     def get_stock_list() -> pd.DataFrame:
         """
-        获取所有A股股票列表
-        返回: DataFrame包含股票代码、名称等信息
+        获取所有A股股票列表及基础指标
+        返回: DataFrame包含股票代码、名称、市盈率、市净率、换手率等信息
         """
         try:
-            # 获取沪深A股实时行情数据
             logger.info("正在获取A股股票列表...")
-            df = ak.stock_zh_a_spot_em()
+            pro = ts.pro_api()
+
+            # 获取股票基础信息
+            stock_basic = pro.stock_basic(
+                exchange='',
+                list_status='L',
+                fields='ts_code,symbol,name,area,industry,market,list_date'
+            )
+
+            if stock_basic.empty:
+                logger.warning("未获取到股票基础信息")
+                return pd.DataFrame()
+
+            # 获取最新交易日
+            trade_cal = pro.trade_cal(exchange='SSE', is_open='1')
+            if not trade_cal.empty:
+                latest_date = trade_cal[trade_cal['cal_date'] <= datetime.now().strftime('%Y%m%d')]['cal_date'].max()
+            else:
+                latest_date = datetime.now().strftime('%Y%m%d')
+
+            # 获取每日指标（包含PE、PB、换手率等）
+            logger.info(f"正在获取 {latest_date} 的市场指标...")
+            daily_basic = pro.daily_basic(
+                trade_date=latest_date,
+                fields='ts_code,close,turnover_rate,pe,pb,total_mv,circ_mv'
+            )
+
+            # 合并数据
+            if not daily_basic.empty:
+                df = pd.merge(stock_basic, daily_basic, on='ts_code', how='left')
+            else:
+                df = stock_basic
+                df['close'] = None
+                df['turnover_rate'] = None
+                df['pe'] = None
+                df['pb'] = None
+                df['total_mv'] = None
+                df['circ_mv'] = None
 
             # 重命名列
             column_mapping = {
-                '代码': 'code',
-                '名称': 'name',
-                '最新价': 'close',
-                '涨跌幅': 'pct_change',
-                '涨跌额': 'change',
-                '成交量': 'volume',
-                '成交额': 'amount',
-                '换手率': 'turnover_rate',
-                '市盈率-动态': 'pe_ratio',
-                '市净率': 'pb_ratio',
-                '总市值': 'total_market_cap',
-                '流通市值': 'circulating_market_cap'
+                'ts_code': 'ts_code',
+                'symbol': 'code',
+                'name': 'name',
+                'market': 'market',
+                'industry': 'industry',
+                'list_date': 'list_date',
+                'close': 'close',
+                'turnover_rate': 'turnover_rate',
+                'pe': 'pe_ratio',
+                'pb': 'pb_ratio',
+                'total_mv': 'total_market_cap',
+                'circ_mv': 'circulating_market_cap'
             }
 
-            # 选择需要的列并重命名
-            available_columns = [col for col in column_mapping.keys() if col in df.columns]
-            df_selected = df[available_columns].copy()
-            df_selected.columns = [column_mapping[col] for col in available_columns]
+            df = df.rename(columns=column_mapping)
 
-            # 市值单位转换（从元转为亿元）
-            for col in ['total_market_cap', 'circulating_market_cap', 'amount']:
-                if col in df_selected.columns:
-                    df_selected[col] = df_selected[col] / 100000000
+            # 市值单位已经是万元，转换为亿元
+            for col in ['total_market_cap', 'circulating_market_cap']:
+                if col in df.columns:
+                    df[col] = df[col] / 10000
 
-            logger.info(f"成功获取 {len(df_selected)} 只股票")
-            return df_selected
+            logger.info(f"成功获取 {len(df)} 只股票")
+            return df
 
         except Exception as e:
             logger.error(f"获取股票列表失败: {e}")
@@ -62,18 +105,22 @@ class DataFetcher:
     def get_stock_info(stock_code: str) -> Optional[Dict]:
         """
         获取单个股票的详细信息
+        Args:
+            stock_code: 股票代码（不带后缀，如 '000001'）
         """
         try:
-            # 获取个股信息
-            stock_info = ak.stock_individual_info_em(symbol=stock_code)
+            pro = ts.pro_api()
 
-            info_dict = {}
-            if not stock_info.empty:
-                for _, row in stock_info.iterrows():
-                    key = row['item']
-                    value = row['value']
-                    info_dict[key] = value
+            # 转换代码格式（添加交易所后缀）
+            ts_code = DataFetcher._convert_to_ts_code(stock_code)
 
+            # 获取基础信息
+            stock_basic = pro.stock_basic(ts_code=ts_code, fields='ts_code,name,area,industry,market,list_date')
+
+            if stock_basic.empty:
+                return None
+
+            info_dict = stock_basic.iloc[0].to_dict()
             return info_dict
 
         except Exception as e:
@@ -83,15 +130,19 @@ class DataFetcher:
     @staticmethod
     def get_stock_history(stock_code: str, start_date: str = None, end_date: str = None) -> pd.DataFrame:
         """
-        获取股票历史行情数据
+        获取股票历史行情数据（包含日线和每日指标）
 
         Args:
-            stock_code: 股票代码
+            stock_code: 股票代码（不带后缀，如 '000001'）
             start_date: 开始日期 YYYYMMDD
             end_date: 结束日期 YYYYMMDD
         """
         try:
             logger.info(f"正在获取股票 {stock_code} 历史数据...")
+            pro = ts.pro_api()
+
+            # 转换代码格式
+            ts_code = DataFetcher._convert_to_ts_code(stock_code)
 
             # 如果没有指定日期，获取最近一年的数据
             if not end_date:
@@ -99,40 +150,76 @@ class DataFetcher:
             if not start_date:
                 start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
 
-            # 获取历史行情数据
-            df = ak.stock_zh_a_hist(symbol=stock_code, period="daily",
-                                     start_date=start_date, end_date=end_date, adjust="qfq")
+            # 获取日线行情数据（前复权）
+            daily = pro.daily(
+                ts_code=ts_code,
+                start_date=start_date,
+                end_date=end_date
+            )
 
-            if df.empty:
+            if daily.empty:
                 logger.warning(f"股票 {stock_code} 没有历史数据")
                 return pd.DataFrame()
 
+            # 获取每日指标（PE、PB、换手率等）
+            daily_basic = pro.daily_basic(
+                ts_code=ts_code,
+                start_date=start_date,
+                end_date=end_date,
+                fields='ts_code,trade_date,turnover_rate,pe,pb,total_mv,circ_mv'
+            )
+
+            # 合并数据
+            if not daily_basic.empty:
+                df = pd.merge(daily, daily_basic, on=['ts_code', 'trade_date'], how='left')
+            else:
+                df = daily
+                df['turnover_rate'] = None
+                df['pe'] = None
+                df['pb'] = None
+                df['total_mv'] = None
+                df['circ_mv'] = None
+
             # 重命名列
             column_mapping = {
-                '日期': 'trade_date',
-                '开盘': 'open',
-                '收盘': 'close',
-                '最高': 'high',
-                '最低': 'low',
-                '成交量': 'volume',
-                '成交额': 'amount',
-                '涨跌幅': 'pct_change',
-                '涨跌额': 'change',
-                '换手率': 'turnover_rate'
+                'ts_code': 'ts_code',
+                'trade_date': 'trade_date',
+                'open': 'open',
+                'high': 'high',
+                'low': 'low',
+                'close': 'close',
+                'vol': 'volume',
+                'amount': 'amount',
+                'pct_chg': 'pct_change',
+                'change': 'change',
+                'turnover_rate': 'turnover_rate',
+                'total_mv': 'total_market_cap',
+                'circ_mv': 'circulating_market_cap'
             }
 
-            available_columns = [col for col in column_mapping.keys() if col in df.columns]
-            df_selected = df[available_columns].copy()
-            df_selected.columns = [column_mapping[col] for col in available_columns]
+            df = df.rename(columns=column_mapping)
 
-            # 添加股票代码
-            df_selected['code'] = stock_code
+            # 添加股票代码（不带后缀）
+            df['code'] = stock_code
 
             # 转换日期格式
-            df_selected['trade_date'] = pd.to_datetime(df_selected['trade_date'])
+            df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
 
-            logger.info(f"成功获取股票 {stock_code} {len(df_selected)} 天的历史数据")
-            return df_selected
+            # 成交量单位转换（手转为股）
+            if 'volume' in df.columns:
+                df['volume'] = df['volume'] * 100
+
+            # 成交额单位已经是千元，转换为元
+            if 'amount' in df.columns:
+                df['amount'] = df['amount'] * 1000
+
+            # 市值单位转换（万元转为亿元）
+            for col in ['total_market_cap', 'circulating_market_cap']:
+                if col in df.columns:
+                    df[col] = df[col] / 10000
+
+            logger.info(f"成功获取股票 {stock_code} {len(df)} 天的历史数据")
+            return df
 
         except Exception as e:
             logger.error(f"获取股票 {stock_code} 历史数据失败: {e}")
@@ -142,10 +229,18 @@ class DataFetcher:
     def get_stock_financial_indicators(stock_code: str) -> Optional[Dict]:
         """
         获取股票财务指标
+        Args:
+            stock_code: 股票代码（不带后缀）
         """
         try:
-            # 获取主要财务指标
-            df = ak.stock_financial_analysis_indicator(symbol=stock_code)
+            pro = ts.pro_api()
+            ts_code = DataFetcher._convert_to_ts_code(stock_code)
+
+            # 获取最新财务指标
+            df = pro.fina_indicator(
+                ts_code=ts_code,
+                fields='ts_code,end_date,roe,roa,debt_to_assets,current_ratio'
+            )
 
             if df.empty:
                 return None
@@ -164,16 +259,21 @@ class DataFetcher:
         获取最新的交易日期
         """
         try:
+            pro = ts.pro_api()
+
             # 获取最近的交易日历
             today = datetime.now()
             start_date = (today - timedelta(days=7)).strftime("%Y%m%d")
             end_date = today.strftime("%Y%m%d")
 
-            df = ak.tool_trade_date_hist_sina()
-            df['trade_date'] = pd.to_datetime(df['trade_date'])
+            df = pro.trade_cal(exchange='SSE', start_date=start_date, end_date=end_date, is_open='1')
+
+            if df.empty:
+                return today.date()
 
             # 获取小于等于今天的最新交易日
-            latest = df[df['trade_date'] <= today]['trade_date'].max()
+            df['cal_date'] = pd.to_datetime(df['cal_date'], format='%Y%m%d')
+            latest = df[df['cal_date'] <= today]['cal_date'].max()
 
             return latest.date()
 
@@ -181,3 +281,25 @@ class DataFetcher:
             logger.error(f"获取最新交易日期失败: {e}")
             # 返回今天日期
             return datetime.now().date()
+
+    @staticmethod
+    def _convert_to_ts_code(stock_code: str) -> str:
+        """
+        将股票代码转换为tushare格式（添加交易所后缀）
+        Args:
+            stock_code: 股票代码，如 '000001' 或 '000001.SZ'
+        Returns:
+            tushare格式的代码，如 '000001.SZ'
+        """
+        if '.' in stock_code:
+            return stock_code
+
+        # 根据代码判断交易所
+        if stock_code.startswith('6'):
+            return f"{stock_code}.SH"
+        elif stock_code.startswith(('0', '3')):
+            return f"{stock_code}.SZ"
+        elif stock_code.startswith('4') or stock_code.startswith('8'):
+            return f"{stock_code}.BJ"  # 北交所
+        else:
+            return f"{stock_code}.SH"  # 默认上交所

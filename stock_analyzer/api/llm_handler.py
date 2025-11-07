@@ -78,6 +78,8 @@ class LLMHandler:
                 return self.stock_tools.get_stock_history(**arguments)
             elif tool_name == "filter_stocks":
                 return self.stock_tools.filter_stocks(**arguments)
+            elif tool_name == "execute_sql_query":
+                return self.stock_tools.execute_sql_query(**arguments)
             elif tool_name == "get_database_stats":
                 return self.stock_tools.get_database_stats(**arguments)
             else:
