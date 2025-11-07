@@ -135,13 +135,45 @@ async def startup_event():
     # 初始化 LLM 处理器
     llm_handler = LLMHandler(stock_tools)
 
+    # 初始化默认admin用户
+    init_admin_user()
+
     # 挂载静态文件服务
     web_dir = Path(__file__).parent.parent / "web"
     if web_dir.exists():
-        app.mount("/static", StaticFiles(directory=str(web_dir)), name="static")
+        app.mount("/", StaticFiles(directory=str(web_dir)), name="static")
         logger.info(f"已挂载静态文件目录: {web_dir}")
 
     logger.info("服务初始化完成")
+
+
+def init_admin_user():
+    """初始化默认admin用户"""
+    try:
+        session = db_service.get_session()
+        try:
+            # 检查是否已存在admin用户
+            from ..models import User
+            existing_admin = session.query(User).filter(User.username == "admin").first()
+
+            if not existing_admin:
+                # 创建admin用户
+                from .auth import get_password_hash
+                hashed_password = get_password_hash("password")
+                admin_user = User(
+                    username="admin",
+                    email="admin@example.com",
+                    hashed_password=hashed_password
+                )
+                session.add(admin_user)
+                session.commit()
+                logger.info("已创建默认admin用户，用户名: admin，密码: password")
+            else:
+                logger.info("admin用户已存在")
+        finally:
+            session.close()
+    except Exception as e:
+        logger.error(f"初始化admin用户失败: {e}")
 
 
 @app.on_event("shutdown")
@@ -160,7 +192,6 @@ async def root():
     """根路径 - 返回Web页面"""
     web_dir = Path(__file__).parent.parent / "web"
     index_file = web_dir / "index.html"
-
     if index_file.exists():
         return FileResponse(index_file)
     else:

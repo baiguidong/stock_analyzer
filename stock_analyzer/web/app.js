@@ -1,5 +1,5 @@
 // API基础URL
-const API_BASE_URL = window.location.origin;
+const API_BASE_URL = 'http://localhost:8000';
 
 // 全局状态
 let conversationHistory = [

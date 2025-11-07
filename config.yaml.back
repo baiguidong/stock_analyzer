@@ -5,22 +5,18 @@ database:
   # PostgreSQL: postgresql://user:password@localhost:5432/stock_db
   url: "sqlite:///./stock_data.db"
 
-# Tushare配置
-tushare:
-  # Tushare API Token (从 https://tushare.pro/user/token 获取)
-  token: "your-tushare-token-here"
-
 # 大模型配置
 llm:
   # OpenAI API
   provider: "openai"  # openai, anthropic, ollama
-  api_key: "your-api-key-here"
-  base_url: "https://api.openai.com/v1"  # 可选，用于自定义API端点
-  model: "gpt-4-turbo-preview"
+  api_key: "sk-usFPjpEurSS5nfllYdpNbJn6BTNieeHPKKaacGqnnBxpcCl8"
+  base_url: "http://10.0.1.57:11400/v1"  # 可选，用于自定义API端点
+  model: "llama3.1:8b-instruct-q8_0"
 
   # Anthropic API
   # provider: "anthropic"
-  # api_key: "your-anthropic-key"
+  # api_key: "sk-usFPjpEurSS5nfllYdpNbJn6BTNieeHPKKaacGqnnBxpcCl8"
+  # base_url: "https://anyrouter.top"
   # model: "claude-3-opus-20240229"
 
   # Ollama (本地)
@@ -30,19 +26,12 @@ llm:
 
 # 数据更新配置
 update_schedule:
-  # 每天自动更新时间（24小时制）- 修改为早上7点
-  daily_update_time: "07:00"  # 每天早上7点更新自选股票历史数据
+  # 工作日每天更新时间（24小时制）
+  daily_update_time: "16:00"  # 收盘后更新
   # 是否启用自动更新
   auto_update: true
   # 首次启动是否立即更新
   update_on_start: false
-
-# JWT认证配置
-jwt:
-  # JWT密钥（请修改为随机字符串）
-  secret_key: "your-secret-key-change-this-in-production"
-  # Token过期时间（分钟）
-  access_token_expire_minutes: 1440  # 24小时
 
 # API 服务配置
 api:

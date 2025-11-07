@@ -4,15 +4,13 @@
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
+import hashlib
+import secrets
 
 from ..config import config
-
-# 密码加密上下文
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # OAuth2 密码bearer
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -32,25 +30,49 @@ class TokenData(BaseModel):
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    验证密码
+    验证密码 (使用MD5)
     Args:
         plain_password: 明文密码
-        hashed_password: 哈希密码
+        hashed_password: 哈希密码 (格式: salt$hash)
     Returns:
         是否匹配
     """
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        # 从存储的哈希中提取盐
+        salt, hash_value = hashed_password.split('$')
+        # 使用相同的盐计算密码哈希
+        return get_password_hash_with_salt(plain_password, salt) == hashed_password
+    except ValueError:
+        # 如果格式不正确，可能是旧的未加盐哈希
+        return get_password_hash(plain_password) == hashed_password
 
 
 def get_password_hash(password: str) -> str:
     """
-    获取密码哈希
+    获取密码哈希 (使用MD5加盐)
     Args:
         password: 明文密码
     Returns:
-        哈希密码
+        带盐的哈希密码 (格式: salt$hash)
     """
-    return pwd_context.hash(password)
+    # 生成随机盐
+    salt = secrets.token_hex(16)
+    return get_password_hash_with_salt(password, salt)
+
+
+def get_password_hash_with_salt(password: str, salt: str) -> str:
+    """
+    使用指定盐获取密码哈希
+    Args:
+        password: 明文密码
+        salt: 盐值
+    Returns:
+        带盐的哈希密码 (格式: salt$hash)
+    """
+    # 组合密码和盐，然后计算MD5哈希
+    salted_password = salt + password
+    hash_value = hashlib.md5(salted_password.encode('utf-8')).hexdigest()
+    return f"{salt}${hash_value}"
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
